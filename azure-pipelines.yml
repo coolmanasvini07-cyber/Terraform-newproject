@@ -1,0 +1,140 @@
+trigger:
+- main
+
+variables:
+  terraformVersion: '1.5.7'
+  serviceConnection: 'aks-terraform-connection'
+  workingDirectory: 'env/dev'
+
+stages:
+
+# ---------------- INIT + VALIDATE ----------------
+- stage: Validate
+  displayName: "Terraform Init & Validate"
+  jobs:
+  - job: Validate
+    pool:
+      vmImage: 'ubuntu-latest'
+
+    steps:
+    - checkout: self
+
+    - task: TerraformInstaller@1
+      inputs:
+        terraformVersion: $(terraformVersion)
+
+    - task: TerraformTaskV4@4
+      displayName: "Terraform Init"
+      inputs:
+        provider: 'azurerm'
+        command: 'init'
+        workingDirectory: $(workingDirectory)
+        backendServiceArm: $(serviceConnection)
+        backendAzureRmResourceGroupName: 'devbackendrg'
+        backendAzureRmStorageAccountName: 'devbackendstorage777'
+        backendAzureRmContainerName: 'mybackup'
+        backendAzureRmKey: 'dev.terraform.tfstate'
+
+    - task: TerraformTaskV4@4
+      displayName: "Terraform Validate"
+      inputs:
+        provider: 'azurerm'
+        command: 'validate'
+        workingDirectory: $(workingDirectory)
+
+# ---------------- PLAN ----------------
+- stage: Plan
+  displayName: "Terraform Plan"
+  dependsOn: Validate
+
+  jobs:
+  - job: Plan
+    pool:
+      vmImage: 'ubuntu-latest'
+
+    steps:
+    - checkout: self
+
+    - task: TerraformInstaller@1
+      inputs:
+        terraformVersion: $(terraformVersion)
+
+    - task: TerraformTaskV4@4
+      displayName: "Terraform Init"
+      inputs:
+        provider: 'azurerm'
+        command: 'init'
+        workingDirectory: $(workingDirectory)
+        backendServiceArm: $(serviceConnection)
+        backendAzureRmResourceGroupName: 'devbackendrg'
+        backendAzureRmStorageAccountName: 'devbackendstorage777'
+        backendAzureRmContainerName: 'mybackup'
+        backendAzureRmKey: 'dev.terraform.tfstate'
+
+    - task: TerraformTaskV4@4
+      displayName: "Terraform Plan"
+      inputs:
+        provider: 'azurerm'
+        command: 'plan'
+        workingDirectory: $(workingDirectory)
+        environmentServiceNameAzureRM: $(serviceConnection)
+        commandOptions: '-out=tfplan -var-file=dev.tfvars'
+
+    - task: PublishPipelineArtifact@1
+      displayName: Publish tfplan
+      inputs:
+        targetPath: '$(workingDirectory)/tfplan'
+        artifact: tfplan
+
+# ---------------- APPLY (FIXED) ----------------
+- stage: Apply
+  displayName: "Terraform Apply"
+  dependsOn: Plan
+
+  jobs:
+  - job: Apply
+    pool:
+      vmImage: 'ubuntu-latest'
+
+    steps:
+    - checkout: self
+
+    - task: TerraformInstaller@1
+      inputs:
+        terraformVersion: $(terraformVersion)
+
+    - task: TerraformTaskV4@4
+      displayName: "Terraform Init"
+      inputs:
+        provider: 'azurerm'
+        command: 'init'
+        workingDirectory: $(workingDirectory)
+        backendServiceArm: $(serviceConnection)
+        backendAzureRmResourceGroupName: 'devbackendrg'
+        backendAzureRmStorageAccountName: 'devbackendstorage777'
+        backendAzureRmContainerName: 'mybackup'
+        backendAzureRmKey: 'dev.terraform.tfstate'
+
+    - task: TerraformTaskV4@4
+      displayName: "Terraform Plan"
+      inputs:
+        provider: 'azurerm'
+        command: 'plan'
+        workingDirectory: $(workingDirectory)
+        environmentServiceNameAzureRM: $(serviceConnection)
+        commandOptions: '-out=tfplan -var-file=dev.tfvars'
+
+    - task: TerraformTaskV4@4
+      displayName: "Terraform Apply"
+      inputs:
+        provider: 'azurerm'
+        command: 'apply'
+        workingDirectory: $(workingDirectory)
+        environmentServiceNameAzureRM: $(serviceConnection)
+        commandOptions: '-auto-approve tfplan'
+
+
+
+
+
+
